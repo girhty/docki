@@ -91,7 +91,7 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 	apihost := os.Getenv("YOUR.HOST")
-	conn, noconn := redis.ParseURL("redis://default:hameedD1@redis:6379")
+	conn, noconn := redis.ParseURL("redis://default:ouDJvW06lsEib%HZxhDx7R@redis:6379")
 	if noconn != nil {
 		log.Fatal("Error  while connecting  to database")
 	}
