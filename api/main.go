@@ -91,7 +91,7 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 	apihost := os.Getenv("YOUR.HOST")
-	conn, noconn := redis.ParseURL("redis://default:ouDJvW06lsEib%HZxhDx7R@redis:6379")
+	conn, noconn := redis.ParseURL("redis://default:ouDJvW06lsEib@redis:6379")
 	if noconn != nil {
 		log.Fatal("Error  while connecting  to database")
 	}
@@ -133,7 +133,7 @@ func main() {
 		}
 		return c.Redirect(res)
 	})
-	app.Post("/bulk", func(c *fiber.Ctx) error {
+	app.Post("/api/bulk", func(c *fiber.Ctx) error {
 		order := c.Body()
 		obj := string(order)
 		var data Arr
