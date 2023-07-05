@@ -1,0 +1,29 @@
+version: '3'
+services:
+  redis:
+    image: redis:alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+  go-short1:
+    build:
+      context: .
+      dockerfile: ./api/Dockerfile
+    ports:
+      - '3001:3000'
+
+  go-short2:
+    build:
+      context: .
+      dockerfile: ./api/Dockerfile
+    ports:
+      - '3002:3000'
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - '80:80'
+    volumes:
+      - ./conf.d:/etc/nginx/conf.d
