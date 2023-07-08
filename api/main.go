@@ -21,20 +21,15 @@ import (
 
 var ctx = context.Background()
 
-func searchID(input string) (string, error) {
+func SearchUrl(input string) (string, error) {
 	regex := regexp.MustCompile(`https?:\/\/(?:www\.)?([-\d\w.]{2,256}[\d\w]{2,6}\b)*(\/[?\/\d\w\=+&#.-]*)*`)
 	m := regex.FindStringSubmatch(input)
 	if m != nil {
 		return m[0], nil
 	}
-	return "", fmt.Errorf("Url Format Not Supported")
+	return "", fmt.Errorf("url format not supported")
 }
 
-type resp struct {
-	Uid  string `json:"ID"`
-	Dura int    `json:"duration"`
-	Url  string `json:"ShortURL"`
-}
 type Bulk struct {
 	UrlToshorten string `json:"url"`
 	Duration     int    `json:"duration"`
@@ -73,15 +68,15 @@ func CheckID(input string, client *redis.Client) (string, error) {
 		id := m[0]
 		ch, cherr := client.Get(ctx, id).Result()
 		if cherr != nil {
-			return "", fmt.Errorf("Key Not found")
+			return "", fmt.Errorf("key not found")
 		}
 		decodedBytes, err := base64.StdEncoding.DecodeString(ch)
 		if err != nil {
-			return "", fmt.Errorf("Error While Getting Url")
+			return "", fmt.Errorf("error while getting url")
 		}
 		return string(decodedBytes), nil
 	}
-	return "", fmt.Errorf("Id Format Is Not Supported")
+	return "", fmt.Errorf("id format is not supported")
 }
 
 func main() {
@@ -90,8 +85,9 @@ func main() {
 	if bad != nil {
 		log.Fatal("Error loading .env file")
 	}
-	apihost := os.Getenv("YOUR.HOST")
-	conn, noconn := redis.ParseURL("redis://default:ouDJvW06lsEib@redis:6379")
+	apihost := os.Getenv("HOST")
+	rdurl := os.Getenv("REDIS")
+	conn, noconn := redis.ParseURL(rdurl)
 	if noconn != nil {
 		log.Fatal("Error  while connecting  to database")
 	}
@@ -113,7 +109,7 @@ func main() {
 			err := "High Duration ,Not supported"
 			return c.Status(fiber.StatusBadRequest).JSON(Shortend{Url: nil, Duration: nil, Orginalurl: nil, Err: &err, Status: nil})
 		}
-		ser, sererr := searchID(uri)
+		ser, sererr := SearchUrl(uri)
 		if sererr != nil {
 			err := sererr.Error()
 			return c.Status(fiber.StatusBadRequest).JSON(Shortend{Url: nil, Duration: nil, Orginalurl: nil, Err: &err, Status: nil})
@@ -154,28 +150,35 @@ func main() {
 			return c.Status(fiber.StatusBadRequest).JSON(BasicERR{InvalidBody: nil, TooMuchUrls: &err, NoUrls: nil})
 		}
 		var res_obj []Shortend
-		for _, ur := range data.Urls {
-			origin := ur.UrlToshorten
-			duration := ur.Duration
-			if duration > 3600 {
-				err := "Duration Too high"
-				res_obj = append(res_obj, Shortend{Orginalurl: &origin, Duration: &duration, Url: nil, Err: &err, Status: nil})
-				continue
+		ca := make(chan Shortend)
+		go func(data Arr, ca chan Shortend) {
+			for _, ur := range data.Urls {
+				origin := ur.UrlToshorten
+				duration := ur.Duration
+				if duration > 3600 {
+					err := "Duration Too high"
+					ca <- Shortend{Orginalurl: &origin, Duration: &duration, Url: nil, Err: &err, Status: nil}
+					continue
+				}
+				if duration == 0 {
+					duration += 60
+				}
+				ser, searcherr := SearchUrl(origin)
+				if searcherr != nil {
+					err := searcherr.Error()
+					ca <- Shortend{Orginalurl: &origin, Duration: nil, Url: nil, Err: &err, Status: nil}
+					continue
+				}
+				u, fullstr := GenrateUid(ser)
+				shotrendone := apihost + "/" + u[:7]
+				status := client.SetNX(ctx, u[:7], fullstr, time.Duration(duration)*time.Second).Val()
+				stat := !status
+				ca <- Shortend{Orginalurl: &origin, Duration: &duration, Url: &shotrendone, Err: nil, Status: &stat}
 			}
-			if duration == 0 {
-				duration += 60
-			}
-			ser, searcherr := searchID(origin)
-			if searcherr != nil {
-				err := searcherr.Error()
-				res_obj = append(res_obj, Shortend{Orginalurl: &origin, Duration: nil, Url: nil, Err: &err, Status: nil})
-				continue
-			}
-			u, fullstr := GenrateUid(ser)
-			shotrendone := apihost + "/" + u[:7]
-			status := client.SetNX(ctx, u[:7], fullstr, time.Duration(duration)*time.Second).Val()
-			stat := !status
-			res_obj = append(res_obj, Shortend{Orginalurl: &origin, Duration: &duration, Url: &shotrendone, Err: nil, Status: &stat})
+			close(ca)
+		}(data, ca)
+		for res := range ca {
+			res_obj = append(res_obj, res)
 		}
 		return c.Status(fiber.StatusCreated).JSON(Resp{Short: res_obj})
 	})
